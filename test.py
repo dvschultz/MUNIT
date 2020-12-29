@@ -15,6 +15,18 @@ from torchvision import transforms
 from PIL import Image
 import torchfile
 
+def line_interpolate(seeds, steps):
+    out = []
+    # print(len(seeds))
+    for i in range(len(seeds)-1):
+        print('seed: ' + str(i))
+        for index in range(steps):
+            # print('index: ' + str(index))
+            fraction = index/float(steps)
+            out.append(seeds[i+1]*fraction + seeds[i]*(1-fraction))
+    # print(len(out))
+    return out
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="net configuration")
 parser.add_argument('--input', type=str, help="input image path")
@@ -26,13 +38,14 @@ parser.add_argument('--seed', type=int, default=10, help="random seed")
 parser.add_argument('--num_style',type=int, default=10, help="number of styles to sample")
 parser.add_argument('--num_style_start',type=int, default=0, help="starting style sample index (zero index based)")
 parser.add_argument('--synchronized', action='store_true', help="whether use synchronized style code or not")
+parser.add_argument('--interpolation', action='store_true', help="use interpolation")
+parser.add_argument('--seeds', type=str, default='0,1', help="random seeds for interpolation")
+parser.add_argument('--frames',type=int, default=60, help="frame count for interpolation")
 parser.add_argument('--output_only', action='store_true', help="whether use synchronized style code or not")
 parser.add_argument('--output_path', type=str, default='.', help="path for logs, checkpoints, and VGG model weight")
 parser.add_argument('--file_extension', type=str, default='png', help="jpg or png (default: png)")
 parser.add_argument('--trainer', type=str, default='MUNIT', help="MUNIT|UNIT")
 opts = parser.parse_args()
-
-
 
 torch.manual_seed(opts.seed)
 torch.cuda.manual_seed(opts.seed)
@@ -93,12 +106,32 @@ with torch.no_grad():
             _, style = style_encode(style_image)
         else:
             style = style_rand
-        for j in range(opts.num_style_start,style_count):
-            s = style[j].unsqueeze(0)
-            outputs = decode(content, s)
-            outputs = (outputs + 1) / 2.
-            path = os.path.join(opts.output_folder, 'output{:03d}.{}'.format(j,opts.file_extension))
-            vutils.save_image(outputs.data, path, padding=0, normalize=True)
+
+        if (opts.interpolation):
+            seed_range = [int(seed) for seed in opts.seeds.split(',')]
+            styles = []
+            for s in seed_range:
+                styles.append(style[s].unsqueeze(0))
+            # print(styles)
+            # number_of_steps = int(frames/(len(ws)-1))+1
+            steps = int(opts.frames/(len(seed_range)-1))
+            # print(steps)
+            style_interp = line_interpolate(styles,steps)
+            # print(len(style_interp))
+            for j in range(len(style_interp)):
+                # print(j)
+                s = style_interp[j]
+                outputs = decode(content, s)
+                outputs = (outputs + 1) / 2.
+                path = os.path.join(opts.output_folder, 'output{:03d}.{}'.format(j,opts.file_extension))
+                vutils.save_image(outputs.data, path, padding=0, normalize=True)
+        else:
+            for j in range(opts.num_style_start,style_count):
+                s = style[j].unsqueeze(0)
+                outputs = decode(content, s)
+                outputs = (outputs + 1) / 2.
+                path = os.path.join(opts.output_folder, 'output{:03d}.{}'.format(j,opts.file_extension))
+                vutils.save_image(outputs.data, path, padding=0, normalize=True)
     elif opts.trainer == 'UNIT':
         outputs = decode(content)
         outputs = (outputs + 1) / 2.
