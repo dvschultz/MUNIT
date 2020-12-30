@@ -401,3 +401,15 @@ def pytorch03_to_pytorch04(state_dict_base, trainer_name):
     state_dict['a'] = __conversion_core(state_dict_base['a'], trainer_name)
     state_dict['b'] = __conversion_core(state_dict_base['b'], trainer_name)
     return state_dict
+
+def line_interpolate(seeds, steps):
+    out = []
+    # print(len(seeds))
+    for i in range(len(seeds)-1):
+        print('seed: ' + str(i))
+        for index in range(steps):
+            # print('index: ' + str(index))
+            fraction = index/float(steps)
+            out.append(seeds[i+1]*fraction + seeds[i]*(1-fraction))
+    # print(len(out))
+    return out

@@ -3,7 +3,7 @@ Copyright (C) 2018 NVIDIA Corporation.  All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 """
 from __future__ import print_function
-from utils import get_config, pytorch03_to_pytorch04
+from utils import get_config, pytorch03_to_pytorch04, line_interpolate
 from trainer import MUNIT_Trainer, UNIT_Trainer
 import argparse
 from torch.autograd import Variable
@@ -15,17 +15,7 @@ from torchvision import transforms
 from PIL import Image
 import torchfile
 
-def line_interpolate(seeds, steps):
-    out = []
-    # print(len(seeds))
-    for i in range(len(seeds)-1):
-        print('seed: ' + str(i))
-        for index in range(steps):
-            # print('index: ' + str(index))
-            fraction = index/float(steps)
-            out.append(seeds[i+1]*fraction + seeds[i]*(1-fraction))
-    # print(len(out))
-    return out
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=str, help="net configuration")

@@ -3,7 +3,7 @@ Copyright (C) 2018 NVIDIA Corporation.  All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 """
 from __future__ import print_function
-from utils import get_config, get_data_loader_folder, pytorch03_to_pytorch04, load_inception
+from utils import get_config, get_data_loader_folder, pytorch03_to_pytorch04, load_inception, line_iterpolate
 from trainer import MUNIT_Trainer, UNIT_Trainer
 from torch import nn
 from scipy.stats import entropy
@@ -35,6 +35,8 @@ parser.add_argument('--synchronized', action='store_true', help="whether use syn
 parser.add_argument('--output_only', action='store_true', help="whether only save the output images or also save the input images")
 parser.add_argument('--output_path', type=str, default='.', help="path for logs, checkpoints, and VGG model weight")
 parser.add_argument('--file_extension', type=str, default='png', help="jpg or png (default: png)")
+parser.add_argument('--interpolation', action='store_true', help="use interpolation")
+parser.add_argument('--seeds', type=str, default='0,1', help="random seeds for interpolation")
 parser.add_argument('--trainer', type=str, default='MUNIT', help="MUNIT|UNIT")
 parser.add_argument('--compute_IS', action='store_true', help="whether to compute Inception Score or not")
 parser.add_argument('--compute_CIS', action='store_true', help="whether to compute Conditional Inception Score or not")
