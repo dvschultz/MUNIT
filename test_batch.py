@@ -3,7 +3,7 @@ Copyright (C) 2018 NVIDIA Corporation.  All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 """
 from __future__ import print_function
-from utils import get_config, get_data_loader_folder, pytorch03_to_pytorch04, load_inception, line_iterpolate
+from utils import get_config, get_data_loader_folder, pytorch03_to_pytorch04, load_inception, line_interpolate
 from trainer import MUNIT_Trainer, UNIT_Trainer
 from torch import nn
 from scipy.stats import entropy
@@ -35,7 +35,7 @@ parser.add_argument('--synchronized', action='store_true', help="whether use syn
 parser.add_argument('--output_only', action='store_true', help="whether only save the output images or also save the input images")
 parser.add_argument('--output_path', type=str, default='.', help="path for logs, checkpoints, and VGG model weight")
 parser.add_argument('--file_extension', type=str, default='png', help="jpg or png (default: png)")
-parser.add_argument('--interpolation', action='store_true', help="use interpolation")
+parser.add_argument('--video', action='store_true', help="use as video, and use interpolation")
 parser.add_argument('--seeds', type=str, default='0,1', help="random seeds for interpolation")
 parser.add_argument('--trainer', type=str, default='MUNIT', help="MUNIT|UNIT")
 parser.add_argument('--compute_IS', action='store_true', help="whether to compute Inception Score or not")
@@ -97,52 +97,76 @@ if opts.compute_CIS:
 
 if opts.trainer == 'MUNIT':
     # Start testing
-    style_fixed = Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda(), volatile=True)
-    for i, (images, names) in enumerate(zip(data_loader, image_names)):
-        if opts.compute_CIS:
-            cur_preds = []
-        print(names[1])
-        images = Variable(images.cuda(), volatile=True)
-        content, _ = encode(images)
-        style = style_fixed if opts.synchronized else Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda(), volatile=True)
+    if(opts.video):
         style_count = opts.num_style_start + opts.num_style
-        for j in range(opts.num_style_start,style_count):
-            s = style[j].unsqueeze(0)
+        style = Variable(torch.randn(style_count, style_dim, 1, 1).cuda())
+        seed_range = [int(seed) for seed in opts.seeds.split(',')]
+        styles = []
+        for s in seed_range:
+            styles.append(style[s].unsqueeze(0))
+
+        print(len(image_names))
+        steps = int(len(image_names)/(len(seed_range)-1))
+        # print(steps)
+        style_interp = line_interpolate(styles,steps)
+
+        for i, (images, names) in enumerate(zip(data_loader, image_names)):
+            print(names[1])
+            images = Variable(images.cuda())
+            content, _ = encode(images)
+            s = style_interp[i]
             outputs = decode(content, s)
             outputs = (outputs + 1) / 2.
-            if opts.compute_IS or opts.compute_CIS:
-                pred = F.softmax(inception(inception_up(outputs)), dim=1).cpu().data.numpy()  # get the predicted class distribution
-            if opts.compute_IS:
-                all_preds.append(pred)
-            if opts.compute_CIS:
-                cur_preds.append(pred)
-            # path = os.path.join(opts.output_folder, 'input{:03d}_output{:03d}.jpg'.format(i, j))
-            basename = os.path.basename(names[1]).split('.')[0]
-            filename = '{}.{}'.format(basename,opts.file_extension)
-            path = os.path.join(opts.output_folder+"_%02d"%j,filename)
-            if not os.path.exists(os.path.dirname(path)):
-                os.makedirs(os.path.dirname(path))
+            path = os.path.join(opts.output_folder, 'output{:09d}.{}'.format(i,opts.file_extension))
             vutils.save_image(outputs.data, path, padding=0, normalize=True)
-        if opts.compute_CIS:
-            cur_preds = np.concatenate(cur_preds, 0)
-            py = np.sum(cur_preds, axis=0)  # prior is computed from outputs given a specific input
-            for j in range(cur_preds.shape[0]):
-                pyx = cur_preds[j, :]
-                CIS.append(entropy(pyx, py))
-        if not opts.output_only:
-            # also save input images
-            vutils.save_image(images.data, os.path.join(opts.output_folder, 'input{:03d}.jpg'.format(i)), padding=0, normalize=True)
-    if opts.compute_IS:
-        all_preds = np.concatenate(all_preds, 0)
-        py = np.sum(all_preds, axis=0)  # prior is computed from all outputs
-        for j in range(all_preds.shape[0]):
-            pyx = all_preds[j, :]
-            IS.append(entropy(pyx, py))
 
-    if opts.compute_IS:
-        print("Inception Score: {}".format(np.exp(np.mean(IS))))
-    if opts.compute_CIS:
-        print("conditional Inception Score: {}".format(np.exp(np.mean(CIS))))
+    else:
+        style_fixed = Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda(), volatile=True)
+        for i, (images, names) in enumerate(zip(data_loader, image_names)):
+            if opts.compute_CIS:
+                cur_preds = []
+            print(names[1])
+            images = Variable(images.cuda(), volatile=True)
+            content, _ = encode(images)
+            style = style_fixed if opts.synchronized else Variable(torch.randn(opts.num_style, style_dim, 1, 1).cuda(), volatile=True)
+            style_count = opts.num_style_start + opts.num_style
+            for j in range(opts.num_style_start,style_count):
+                s = style[j].unsqueeze(0)
+                outputs = decode(content, s)
+                outputs = (outputs + 1) / 2.
+                if opts.compute_IS or opts.compute_CIS:
+                    pred = F.softmax(inception(inception_up(outputs)), dim=1).cpu().data.numpy()  # get the predicted class distribution
+                if opts.compute_IS:
+                    all_preds.append(pred)
+                if opts.compute_CIS:
+                    cur_preds.append(pred)
+                # path = os.path.join(opts.output_folder, 'input{:03d}_output{:03d}.jpg'.format(i, j))
+                basename = os.path.basename(names[1]).split('.')[0]
+                filename = '{}.{}'.format(basename,opts.file_extension)
+                path = os.path.join(opts.output_folder+"_%02d"%j,filename)
+                if not os.path.exists(os.path.dirname(path)):
+                    os.makedirs(os.path.dirname(path))
+                vutils.save_image(outputs.data, path, padding=0, normalize=True)
+            if opts.compute_CIS:
+                cur_preds = np.concatenate(cur_preds, 0)
+                py = np.sum(cur_preds, axis=0)  # prior is computed from outputs given a specific input
+                for j in range(cur_preds.shape[0]):
+                    pyx = cur_preds[j, :]
+                    CIS.append(entropy(pyx, py))
+            if not opts.output_only:
+                # also save input images
+                vutils.save_image(images.data, os.path.join(opts.output_folder, 'input{:03d}.jpg'.format(i)), padding=0, normalize=True)
+        if opts.compute_IS:
+            all_preds = np.concatenate(all_preds, 0)
+            py = np.sum(all_preds, axis=0)  # prior is computed from all outputs
+            for j in range(all_preds.shape[0]):
+                pyx = all_preds[j, :]
+                IS.append(entropy(pyx, py))
+
+        if opts.compute_IS:
+            print("Inception Score: {}".format(np.exp(np.mean(IS))))
+        if opts.compute_CIS:
+            print("conditional Inception Score: {}".format(np.exp(np.mean(CIS))))
 
 elif opts.trainer == 'UNIT':
     # Start testing
